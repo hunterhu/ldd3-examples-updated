@@ -2,11 +2,13 @@ ifneq ($(KERNELRELEASE),)
 	obj-m := hello.o
 
 else
-	# this has to be directory where the running kernel
-	# was built, i.e. where all the object files are,
-	# so that they can be linked to
-	#KERNELDIR ?= /lib/modules/$(shell uname -r)/build
-	KERNELDIR ?= ~/projects/linux-3.6.10/linux-3.6.10
+	# As far as the testing system is running the kernel
+	# built from the source, the following line always
+	# points to the kernel source directory, even, e.g.,
+	# the place looks not that beautiful like this:
+	# /home/hunter/projects/linux-3.6.10/linux-3.6.10
+
+	KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 	PWD := $(shell pwd)
 
 default:
