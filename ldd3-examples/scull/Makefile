@@ -9,23 +9,21 @@ else
   DEBFLAGS = -O2
 endif
 
-CFLAGS += $(DEBFLAGS)
-CFLAGS += -I$(LDDINC)
+ccflags-y += $(DEBFLAGS)
+ccflags-y += -I$(LDDINC)
 
 ifneq ($(KERNELRELEASE),)
 # call from kernel build system
 
-scull-objs := main.o pipe.o access.o
-
 obj-m	:= scull.o
-
+scull-y := main.o pipe.o access.o
 else
 
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 PWD       := $(shell pwd)
 
 modules:
-	$(MAKE) -C $(KERNELDIR) M=$(PWD) LDDINC=$(PWD)/../include modules
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) LDDINC=$(KERNELDIR)/include modules
 
 endif
 
