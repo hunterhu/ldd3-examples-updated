@@ -27,6 +27,7 @@
 #include <linux/fcntl.h>	/* O_ACCMODE */
 #include <linux/seq_file.h>
 #include <linux/cdev.h>
+#include <linux/version.h>
 
 #include <asm/switch_to.h>		/* cli(), *_flags */
 #include <asm/uaccess.h>	/* copy_*_user */
