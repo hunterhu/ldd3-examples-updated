@@ -15,7 +15,6 @@
  * $Id: jiq.c,v 1.7 2004/09/26 07:02:43 gregkh Exp $
  */
  
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -28,6 +27,7 @@
 #include <linux/workqueue.h>
 #include <linux/preempt.h>
 #include <linux/interrupt.h> /* tasklets */
+#include <linux/sched.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -54,6 +54,7 @@ static DECLARE_WAIT_QUEUE_HEAD (jiq_wait);
 
 
 static struct work_struct jiq_work;
+static struct delayed_work jiq_delayed_work;
 
 
 
@@ -119,7 +120,7 @@ static void jiq_print_wq(void *ptr)
 		return;
     
 	if (data->delay)
-		schedule_delayed_work(&jiq_work, data->delay);
+		schedule_delayed_work(&jiq_delayed_work, data->delay);
 	else
 		schedule_work(&jiq_work);
 }
@@ -157,7 +158,7 @@ static int jiq_read_wq_delayed(char *buf, char **start, off_t offset,
 	jiq_data.delay = delay;
     
 	prepare_to_wait(&jiq_wait, &wait, TASK_INTERRUPTIBLE);
-	schedule_delayed_work(&jiq_work, delay);
+	schedule_delayed_work(&jiq_delayed_work, delay);
 	schedule();
 	finish_wait(&jiq_wait, &wait);
 
@@ -241,7 +242,8 @@ static int jiq_init(void)
 {
 
 	/* this line is in jiq_init() */
-	INIT_WORK(&jiq_work, jiq_print_wq, &jiq_data);
+	INIT_WORK(&jiq_work, jiq_print_wq);
+	INIT_DELAYED_WORK(&jiq_delayed_work, jiq_print_wq);
 
 	create_proc_read_entry("jiqwq", 0, NULL, jiq_read_wq, NULL);
 	create_proc_read_entry("jiqwqdelay", 0, NULL, jiq_read_wq_delayed, NULL);

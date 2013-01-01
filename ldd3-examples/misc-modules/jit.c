@@ -15,7 +15,6 @@
  * $Id: jit.c,v 1.16 2004/09/26 07:02:43 gregkh Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -26,6 +25,7 @@
 #include <linux/proc_fs.h>
 #include <linux/types.h>
 #include <linux/spinlock.h>
+#include <linux/sched.h>
 #include <linux/interrupt.h>
 
 #include <asm/hardirq.h>

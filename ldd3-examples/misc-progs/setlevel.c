@@ -25,6 +25,7 @@
 /* #include <unistd.h> */ /* conflicting on the alpha */
 #define __LIBRARY__ /* _syscall3 and friends are only available through this */
 #include <linux/unistd.h>
+#include <linux/syslog.h>
 
 /* define the system call, to override the library function */
 _syscall3(int, syslog, int, type, char *, bufp, int, len);
