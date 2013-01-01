@@ -1,4 +1,14 @@
 /*----------------------------------------------------------
+ Module Printk Outputs
+
+ Usually printk messages are not shown up in a normal terminal,
+ we could use dmesg command to see it after.
+
+ Another good realtime way of displaying the printk messages
+-----------------------------------------------------------*/
+ sudo cat /proc/kmsg
+
+/*----------------------------------------------------------
  General Module Testing Procedures
 
  Some examples include load
@@ -14,7 +24,7 @@
 1> sudo insmod faulty.ko
 2> cat /proc/devices  /* find the device number of faulty, say 247 */
 3> sudo mknod /dev/faulty c 247 0
-4> sudo chmod 666 /dev/faulty
+> sudo chmod 666 /dev/faulty
 
 Following steps could be read/write operations to test out the module,
 such as, (for faulty itself, the read/write will triger oops messages,
