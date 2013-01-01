@@ -1,0 +1,29 @@
+/*----------------------------------------------------------
+ General Module Testing Procedures
+
+ Some examples include load
+ scripts such as scull_load/scull_unload, which could be
+ modified and adapted to other modules.
+
+ When testing an easy and single module, manual steps could
+ be done to test quickly.
+
+ Use faulty.ko as an example.
+-----------------------------------------------------------*/
+
+1> sudo insmod faulty.ko
+2> cat /proc/devices  /* find the device number of faulty, say 247 */
+3> sudo mknod /dev/faulty c 247 0
+4> sudo chmod 666 /dev/faulty
+
+Following steps could be read/write operations to test out the module,
+such as, (for faulty itself, the read/write will triger oops messages,
+be cautious before cat/echo)
+
+cat /dev/faulty                 /* read */
+echo something > /dev/faulty    /* write */
+
+if desired, remove and clean up;
+
+1> sudo rmmod faulty
+2> sudo rm -f /dev/faulty
