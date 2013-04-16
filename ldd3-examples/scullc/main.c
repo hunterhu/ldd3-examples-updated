@@ -15,7 +15,6 @@
  * $Id: _main.c.in,v 1.21 2004/10/14 20:11:39 corbet Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -49,7 +48,7 @@ int scullc_trim(struct scullc_dev *dev);
 void scullc_cleanup(void);
 
 /* declare one cache pointer: use it for all devices */
-kmem_cache_t *scullc_cache;
+struct kmem_cache *scullc_cache;
 
 
 
@@ -269,101 +268,6 @@ ssize_t scullc_write (struct file *filp, const char __user *buf, size_t count,
 }
 
 /*
- * The ioctl() implementation
- */
-
-int scullc_ioctl (struct inode *inode, struct file *filp,
-                 unsigned int cmd, unsigned long arg)
-{
-
-	int err = 0, ret = 0, tmp;
-
-	/* don't even decode wrong cmds: better returning  ENOTTY than EFAULT */
-	if (_IOC_TYPE(cmd) != SCULLC_IOC_MAGIC) return -ENOTTY;
-	if (_IOC_NR(cmd) > SCULLC_IOC_MAXNR) return -ENOTTY;
-
-	/*
-	 * the type is a bitmask, and VERIFY_WRITE catches R/W
-	 * transfers. Note that the type is user-oriented, while
-	 * verify_area is kernel-oriented, so the concept of "read" and
-	 * "write" is reversed
-	 */
-	if (_IOC_DIR(cmd) & _IOC_READ)
-		err = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
-	else if (_IOC_DIR(cmd) & _IOC_WRITE)
-		err =  !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
-	if (err)
-		return -EFAULT;
-
-	switch(cmd) {
-
-	case SCULLC_IOCRESET:
-		scullc_qset = SCULLC_QSET;
-		scullc_quantum = SCULLC_QUANTUM;
-		break;
-
-	case SCULLC_IOCSQUANTUM: /* Set: arg points to the value */
-		ret = __get_user(scullc_quantum, (int __user *) arg);
-		break;
-
-	case SCULLC_IOCTQUANTUM: /* Tell: arg is the value */
-		scullc_quantum = arg;
-		break;
-
-	case SCULLC_IOCGQUANTUM: /* Get: arg is pointer to result */
-		ret = __put_user (scullc_quantum, (int __user *) arg);
-		break;
-
-	case SCULLC_IOCQQUANTUM: /* Query: return it (it's positive) */
-		return scullc_quantum;
-
-	case SCULLC_IOCXQUANTUM: /* eXchange: use arg as pointer */
-		tmp = scullc_quantum;
-		ret = __get_user(scullc_quantum, (int __user *) arg);
-		if (ret == 0)
-			ret = __put_user(tmp, (int __user *) arg);
-		break;
-
-	case SCULLC_IOCHQUANTUM: /* sHift: like Tell + Query */
-		tmp = scullc_quantum;
-		scullc_quantum = arg;
-		return tmp;
-
-	case SCULLC_IOCSQSET:
-		ret = __get_user(scullc_qset, (int __user *) arg);
-		break;
-
-	case SCULLC_IOCTQSET:
-		scullc_qset = arg;
-		break;
-
-	case SCULLC_IOCGQSET:
-		ret = __put_user(scullc_qset, (int __user *)arg);
-		break;
-
-	case SCULLC_IOCQQSET:
-		return scullc_qset;
-
-	case SCULLC_IOCXQSET:
-		tmp = scullc_qset;
-		ret = __get_user(scullc_qset, (int __user *)arg);
-		if (ret == 0)
-			ret = __put_user(tmp, (int __user *)arg);
-		break;
-
-	case SCULLC_IOCHQSET:
-		tmp = scullc_qset;
-		scullc_qset = arg;
-		return tmp;
-
-	default:  /* redundant, as cmd was checked against MAXNR */
-		return -ENOTTY;
-	}
-
-	return ret;
-}
-
-/*
  * The "extended" operations
  */
 
@@ -401,7 +305,7 @@ loff_t scullc_llseek (struct file *filp, loff_t off, int whence)
 struct async_work {
 	struct kiocb *iocb;
 	int result;
-	struct work_struct work;
+	struct delayed_work work;
 };
 
 /*
@@ -432,13 +336,13 @@ static int scullc_defer_op(int write, struct kiocb *iocb, char __user *buf,
 		return result;
 
 	/* Otherwise defer the completion for a few milliseconds. */
-	stuff = kmalloc (sizeof (*stuff), GFP_KERNEL);
+	stuff = (struct async_work *)kmalloc (sizeof (*stuff), GFP_KERNEL);
 	if (stuff == NULL)
 		return result; /* No memory, just complete now */
 	stuff->iocb = iocb;
 	stuff->result = result;
-	INIT_WORK(&stuff->work, scullc_do_deferred_op, stuff);
-	schedule_delayed_work(&stuff->work, HZ/100);
+	INIT_DELAYED_WORK(&(stuff->work), scullc_do_deferred_op);
+	schedule_delayed_work(&(stuff->work), HZ/100);
 	return -EIOCBQUEUED;
 }
 
@@ -467,7 +371,6 @@ struct file_operations scullc_fops = {
 	.llseek =    scullc_llseek,
 	.read =	     scullc_read,
 	.write =     scullc_write,
-	.ioctl =     scullc_ioctl,
 	.open =	     scullc_open,
 	.release =   scullc_release,
 	.aio_read =  scullc_aio_read,
@@ -558,7 +461,7 @@ int scullc_init(void)
 	}
 
 	scullc_cache = kmem_cache_create("scullc", scullc_quantum,
-			0, SLAB_HWCACHE_ALIGN, NULL, NULL); /* no ctor/dtor */
+			0, SLAB_HWCACHE_ALIGN, NULL); /* no ctor/dtor */
 	if (!scullc_cache) {
 		scullc_cleanup();
 		return -ENOMEM;
