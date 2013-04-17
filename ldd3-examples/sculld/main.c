@@ -15,7 +15,6 @@
  * $Id: _main.c.in,v 1.21 2004/10/14 20:11:39 corbet Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -277,101 +276,6 @@ ssize_t sculld_write (struct file *filp, const char __user *buf, size_t count,
 }
 
 /*
- * The ioctl() implementation
- */
-
-int sculld_ioctl (struct inode *inode, struct file *filp,
-                 unsigned int cmd, unsigned long arg)
-{
-
-	int err = 0, ret = 0, tmp;
-
-	/* don't even decode wrong cmds: better returning  ENOTTY than EFAULT */
-	if (_IOC_TYPE(cmd) != SCULLD_IOC_MAGIC) return -ENOTTY;
-	if (_IOC_NR(cmd) > SCULLD_IOC_MAXNR) return -ENOTTY;
-
-	/*
-	 * the type is a bitmask, and VERIFY_WRITE catches R/W
-	 * transfers. Note that the type is user-oriented, while
-	 * verify_area is kernel-oriented, so the concept of "read" and
-	 * "write" is reversed
-	 */
-	if (_IOC_DIR(cmd) & _IOC_READ)
-		err = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
-	else if (_IOC_DIR(cmd) & _IOC_WRITE)
-		err =  !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
-	if (err)
-		return -EFAULT;
-
-	switch(cmd) {
-
-	case SCULLD_IOCRESET:
-		sculld_qset = SCULLD_QSET;
-		sculld_order = SCULLD_ORDER;
-		break;
-
-	case SCULLD_IOCSORDER: /* Set: arg points to the value */
-		ret = __get_user(sculld_order, (int __user *) arg);
-		break;
-
-	case SCULLD_IOCTORDER: /* Tell: arg is the value */
-		sculld_order = arg;
-		break;
-
-	case SCULLD_IOCGORDER: /* Get: arg is pointer to result */
-		ret = __put_user (sculld_order, (int __user *) arg);
-		break;
-
-	case SCULLD_IOCQORDER: /* Query: return it (it's positive) */
-		return sculld_order;
-
-	case SCULLD_IOCXORDER: /* eXchange: use arg as pointer */
-		tmp = sculld_order;
-		ret = __get_user(sculld_order, (int __user *) arg);
-		if (ret == 0)
-			ret = __put_user(tmp, (int __user *) arg);
-		break;
-
-	case SCULLD_IOCHORDER: /* sHift: like Tell + Query */
-		tmp = sculld_order;
-		sculld_order = arg;
-		return tmp;
-
-	case SCULLD_IOCSQSET:
-		ret = __get_user(sculld_qset, (int __user *) arg);
-		break;
-
-	case SCULLD_IOCTQSET:
-		sculld_qset = arg;
-		break;
-
-	case SCULLD_IOCGQSET:
-		ret = __put_user(sculld_qset, (int __user *)arg);
-		break;
-
-	case SCULLD_IOCQQSET:
-		return sculld_qset;
-
-	case SCULLD_IOCXQSET:
-		tmp = sculld_qset;
-		ret = __get_user(sculld_qset, (int __user *)arg);
-		if (ret == 0)
-			ret = __put_user(tmp, (int __user *)arg);
-		break;
-
-	case SCULLD_IOCHQSET:
-		tmp = sculld_qset;
-		sculld_qset = arg;
-		return tmp;
-
-	default:  /* redundant, as cmd was checked against MAXNR */
-		return -ENOTTY;
-	}
-
-	return ret;
-}
-
-/*
  * The "extended" operations
  */
 
@@ -409,7 +313,7 @@ loff_t sculld_llseek (struct file *filp, loff_t off, int whence)
 struct async_work {
 	struct kiocb *iocb;
 	int result;
-	struct work_struct work;
+	struct delayed_work work;
 };
 
 /*
@@ -445,7 +349,7 @@ static int sculld_defer_op(int write, struct kiocb *iocb, char __user *buf,
 		return result; /* No memory, just complete now */
 	stuff->iocb = iocb;
 	stuff->result = result;
-	INIT_WORK(&stuff->work, sculld_do_deferred_op, stuff);
+	INIT_DELAYED_WORK(&stuff->work, sculld_do_deferred_op);
 	schedule_delayed_work(&stuff->work, HZ/100);
 	return -EIOCBQUEUED;
 }
@@ -480,7 +384,6 @@ struct file_operations sculld_fops = {
 	.llseek =    sculld_llseek,
 	.read =	     sculld_read,
 	.write =     sculld_write,
-	.ioctl =     sculld_ioctl,
 	.mmap =	     sculld_mmap,
 	.open =	     sculld_open,
 	.release =   sculld_release,
@@ -534,7 +437,7 @@ static void sculld_setup_cdev(struct sculld_dev *dev, int index)
 
 static ssize_t sculld_show_dev(struct device *ddev, char *buf)
 {
-	struct sculld_dev *dev = ddev->driver_data;
+	struct sculld_dev *dev = (struct sculld_dev *)(ddev->platform_data);
 
 	return print_dev_t(buf, dev->cdev.dev);
 }
@@ -546,7 +449,7 @@ static void sculld_register_dev(struct sculld_dev *dev, int index)
 	sprintf(dev->devname, "sculld%d", index);
 	dev->ldev.name = dev->devname;
 	dev->ldev.driver = &sculld_driver;
-	dev->ldev.dev.driver_data = dev;
+	dev->ldev.dev.platform_data = (void *)dev;
 	register_ldd_device(&dev->ldev);
 	device_create_file(&dev->ldev.dev, &dev_attr_dev);
 }
