@@ -15,7 +15,6 @@
  * $Id: _main.c.in,v 1.21 2004/10/14 20:11:39 corbet Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -268,101 +267,6 @@ ssize_t scullv_write (struct file *filp, const char __user *buf, size_t count,
 }
 
 /*
- * The ioctl() implementation
- */
-
-int scullv_ioctl (struct inode *inode, struct file *filp,
-                 unsigned int cmd, unsigned long arg)
-{
-
-	int err = 0, ret = 0, tmp;
-
-	/* don't even decode wrong cmds: better returning  ENOTTY than EFAULT */
-	if (_IOC_TYPE(cmd) != SCULLV_IOC_MAGIC) return -ENOTTY;
-	if (_IOC_NR(cmd) > SCULLV_IOC_MAXNR) return -ENOTTY;
-
-	/*
-	 * the type is a bitmask, and VERIFY_WRITE catches R/W
-	 * transfers. Note that the type is user-oriented, while
-	 * verify_area is kernel-oriented, so the concept of "read" and
-	 * "write" is reversed
-	 */
-	if (_IOC_DIR(cmd) & _IOC_READ)
-		err = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
-	else if (_IOC_DIR(cmd) & _IOC_WRITE)
-		err =  !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
-	if (err)
-		return -EFAULT;
-
-	switch(cmd) {
-
-	case SCULLV_IOCRESET:
-		scullv_qset = SCULLV_QSET;
-		scullv_order = SCULLV_ORDER;
-		break;
-
-	case SCULLV_IOCSORDER: /* Set: arg points to the value */
-		ret = __get_user(scullv_order, (int __user *) arg);
-		break;
-
-	case SCULLV_IOCTORDER: /* Tell: arg is the value */
-		scullv_order = arg;
-		break;
-
-	case SCULLV_IOCGORDER: /* Get: arg is pointer to result */
-		ret = __put_user (scullv_order, (int __user *) arg);
-		break;
-
-	case SCULLV_IOCQORDER: /* Query: return it (it's positive) */
-		return scullv_order;
-
-	case SCULLV_IOCXORDER: /* eXchange: use arg as pointer */
-		tmp = scullv_order;
-		ret = __get_user(scullv_order, (int __user *) arg);
-		if (ret == 0)
-			ret = __put_user(tmp, (int __user *) arg);
-		break;
-
-	case SCULLV_IOCHORDER: /* sHift: like Tell + Query */
-		tmp = scullv_order;
-		scullv_order = arg;
-		return tmp;
-
-	case SCULLV_IOCSQSET:
-		ret = __get_user(scullv_qset, (int __user *) arg);
-		break;
-
-	case SCULLV_IOCTQSET:
-		scullv_qset = arg;
-		break;
-
-	case SCULLV_IOCGQSET:
-		ret = __put_user(scullv_qset, (int __user *)arg);
-		break;
-
-	case SCULLV_IOCQQSET:
-		return scullv_qset;
-
-	case SCULLV_IOCXQSET:
-		tmp = scullv_qset;
-		ret = __get_user(scullv_qset, (int __user *)arg);
-		if (ret == 0)
-			ret = __put_user(tmp, (int __user *)arg);
-		break;
-
-	case SCULLV_IOCHQSET:
-		tmp = scullv_qset;
-		scullv_qset = arg;
-		return tmp;
-
-	default:  /* redundant, as cmd was checked against MAXNR */
-		return -ENOTTY;
-	}
-
-	return ret;
-}
-
-/*
  * The "extended" operations
  */
 
@@ -400,7 +304,7 @@ loff_t scullv_llseek (struct file *filp, loff_t off, int whence)
 struct async_work {
 	struct kiocb *iocb;
 	int result;
-	struct work_struct work;
+	struct delayed_work work;
 };
 
 /*
@@ -436,7 +340,7 @@ static int scullv_defer_op(int write, struct kiocb *iocb, char __user *buf,
 		return result; /* No memory, just complete now */
 	stuff->iocb = iocb;
 	stuff->result = result;
-	INIT_WORK(&stuff->work, scullv_do_deferred_op, stuff);
+	INIT_DELAYED_WORK(&stuff->work, scullv_do_deferred_op);
 	schedule_delayed_work(&stuff->work, HZ/100);
 	return -EIOCBQUEUED;
 }
@@ -471,7 +375,6 @@ struct file_operations scullv_fops = {
 	.llseek =    scullv_llseek,
 	.read =	     scullv_read,
 	.write =     scullv_write,
-	.ioctl =     scullv_ioctl,
 	.mmap =	     scullv_mmap,
 	.open =	     scullv_open,
 	.release =   scullv_release,
