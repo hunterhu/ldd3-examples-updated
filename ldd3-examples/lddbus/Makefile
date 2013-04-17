@@ -7,7 +7,7 @@ ifeq ($(DEBUG),y)
 else
   DEBFLAGS = -O2
 endif
-CFLAGS  += $(DEBFLAGS) -I$(LDDINCDIR)
+ccflags-y  += $(DEBFLAGS) -I$(LDDINCDIR)
 
 
 ifneq ($(KERNELRELEASE),)
