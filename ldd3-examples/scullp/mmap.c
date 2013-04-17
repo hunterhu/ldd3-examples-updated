@@ -15,11 +15,12 @@
  * $Id: _mmap.c.in,v 1.13 2004/10/18 18:07:36 corbet Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/mm.h>		/* everything */
 #include <linux/errno.h>	/* error codes */
+#include <linux/fs.h>	/* error codes */
+#include <linux/semaphore.h>	/* error codes */
 #include <asm/pgtable.h>
 
 #include "scullp.h"		/* local definitions */
@@ -62,7 +63,7 @@ struct page *scullp_vma_nopage(struct vm_area_struct *vma,
 {
 	unsigned long offset;
 	struct scullp_dev *ptr, *dev = vma->vm_private_data;
-	struct page *page = NOPAGE_SIGBUS;
+	struct page *page = VM_FAULT_NOPAGE;
 	void *pageptr = NULL; /* default to "missing" */
 
 	down(&dev->sem);
@@ -97,7 +98,7 @@ struct page *scullp_vma_nopage(struct vm_area_struct *vma,
 struct vm_operations_struct scullp_vm_ops = {
 	.open =     scullp_vma_open,
 	.close =    scullp_vma_close,
-	.nopage =   scullp_vma_nopage,
+	.fault =   scullp_vma_nopage,
 };
 
 
