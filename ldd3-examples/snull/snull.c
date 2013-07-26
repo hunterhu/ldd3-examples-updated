@@ -15,7 +15,6 @@
  * $Id: snull.c,v 1.21 2004/11/05 02:36:03 rubini Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/moduleparam.h>
@@ -118,13 +117,13 @@ void snull_teardown_pool(struct net_device *dev)
 {
 	struct snull_priv *priv = netdev_priv(dev);
 	struct snull_packet *pkt;
-    
+
 	while ((pkt = priv->ppool)) {
 		priv->ppool = pkt->next;
 		kfree (pkt);
 		/* FIXME - in-flight packets ? */
 	}
-}    
+}
 
 /*
  * Buffer/pool management.
@@ -134,7 +133,7 @@ struct snull_packet *snull_get_tx_buffer(struct net_device *dev)
 	struct snull_priv *priv = netdev_priv(dev);
 	unsigned long flags;
 	struct snull_packet *pkt;
-    
+
 	spin_lock_irqsave(&priv->lock, flags);
 	pkt = priv->ppool;
 	priv->ppool = pkt->next;
@@ -151,7 +150,7 @@ void snull_release_buffer(struct snull_packet *pkt)
 {
 	unsigned long flags;
 	struct snull_priv *priv = netdev_priv(pkt->dev);
-	
+
 	spin_lock_irqsave(&priv->lock, flags);
 	pkt->next = priv->ppool;
 	priv->ppool = pkt;
@@ -194,7 +193,7 @@ static void snull_rx_ints(struct net_device *dev, int enable)
 	priv->rx_int_enabled = enable;
 }
 
-    
+
 /*
  * Open and close
  */
@@ -203,7 +202,7 @@ int snull_open(struct net_device *dev)
 {
 	/* request_region(), request_irq(), ....  (like fops->open) */
 
-	/* 
+	/*
 	 * Assign the hardware address of the board: use "\0SNULx", where
 	 * x is 0 or 1. The first byte is '\0' to avoid being a multicast
 	 * address (the first byte of multicast addrs is odd).
@@ -240,7 +239,7 @@ int snull_config(struct net_device *dev, struct ifmap *map)
 	/* Allow changing the IRQ */
 	if (map->irq != dev->irq) {
 		dev->irq = map->irq;
-        	/* request_irq() is delayed to open-time */
+	/* request_irq() is delayed to open-time */
 	}
 
 	/* ignore other fields */
@@ -266,7 +265,7 @@ void snull_rx(struct net_device *dev, struct snull_packet *pkt)
 		priv->stats.rx_dropped++;
 		goto out;
 	}
-	skb_reserve(skb, 2); /* align IP on 16B boundary */  
+	skb_reserve(skb, 2); /* align IP on 16B boundary */
 	memcpy(skb_put(skb, pkt->datalen), pkt->data, pkt->datalen);
 
 	/* Write metadata, and then pass to the receive level */
@@ -279,18 +278,21 @@ void snull_rx(struct net_device *dev, struct snull_packet *pkt)
   out:
 	return;
 }
-    
+
 
 /*
  * The poll implementation.
  */
 static int snull_poll(struct net_device *dev, int *budget)
 {
-	int npackets = 0, quota = min(dev->quota, *budget);
+	//int npackets = 0, quota = min(dev->quota, *budget);
+    //FIXME:net_device struct removes quota field,
+    //for building purpose remove the reference to quota for now
+	int npackets = 0, quota = *budget;
 	struct sk_buff *skb;
 	struct snull_priv *priv = netdev_priv(dev);
 	struct snull_packet *pkt;
-    
+
 	while (npackets < quota && priv->rx_queue) {
 		pkt = snull_dequeue_buf(dev);
 		skb = dev_alloc_skb(pkt->datalen + 2);
@@ -301,14 +303,14 @@ static int snull_poll(struct net_device *dev, int *budget)
 			snull_release_buffer(pkt);
 			continue;
 		}
-		skb_reserve(skb, 2); /* align IP on 16B boundary */  
+		skb_reserve(skb, 2); /* align IP on 16B boundary */
 		memcpy(skb_put(skb, pkt->datalen), pkt->data, pkt->datalen);
 		skb->dev = dev;
 		skb->protocol = eth_type_trans(skb, dev);
 		skb->ip_summed = CHECKSUM_UNNECESSARY; /* don't check it */
 		netif_receive_skb(skb);
-		
-        	/* Maintain stats */
+
+	/* Maintain stats */
 		npackets++;
 		priv->stats.rx_packets++;
 		priv->stats.rx_bytes += pkt->datalen;
@@ -316,17 +318,20 @@ static int snull_poll(struct net_device *dev, int *budget)
 	}
 	/* If we processed all packets, we're done; tell the kernel and reenable ints */
 	*budget -= npackets;
-	dev->quota -= npackets;
+	//dev->quota -= npackets;
 	if (! priv->rx_queue) {
-		netif_rx_complete(dev);
+        //FIXME: netif_rx_complete() removed, is there a replacement
+        //or how does work in the new version 3.6.10? for build purpose
+        //I comment it out for now
+		//netif_rx_complete(dev);
 		snull_rx_ints(dev, 1);
 		return 0;
 	}
 	/* We couldn't process everything. */
 	return 1;
 }
-	    
-        
+
+
 /*
  * The typical interrupt entry point
  */
@@ -403,10 +408,11 @@ static void snull_napi_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	priv->status = 0;
 	if (statusword & SNULL_RX_INTR) {
 		snull_rx_ints(dev, 0);  /* Disable further interrupts */
-		netif_rx_schedule(dev);
+        //FIXME: use the new APIs to handle
+		//netif_rx_schedule(dev);
 	}
 	if (statusword & SNULL_TX_INTR) {
-        	/* a transmission is over: free the skb */
+	/* a transmission is over: free the skb */
 		priv->stats.tx_packets++;
 		priv->stats.tx_bytes += priv->tx_packetlen;
 		dev_kfree_skb(priv->skb);
@@ -435,7 +441,7 @@ static void snull_hw_tx(char *buf, int len, struct net_device *dev)
 	struct snull_priv *priv;
 	u32 *saddr, *daddr;
 	struct snull_packet *tx_buffer;
-    
+
 	/* I am paranoid. Ain't I? */
 	if (len < sizeof(struct ethhdr) + sizeof(struct iphdr)) {
 		printk("snull: Hmm... packet too short (%i octets)\n",
@@ -494,7 +500,7 @@ static void snull_hw_tx(char *buf, int len, struct net_device *dev)
 	priv->tx_packetdata = buf;
 	priv->status |= SNULL_TX_INTR;
 	if (lockup && ((priv->stats.tx_packets + 1) % lockup) == 0) {
-        	/* Simulate a dropped transmit interrupt */
+	/* Simulate a dropped transmit interrupt */
 		netif_stop_queue(dev);
 		PDEBUG("Simulate lockup at %ld, txp %ld\n", jiffies,
 				(unsigned long) priv->stats.tx_packets);
@@ -511,7 +517,7 @@ int snull_tx(struct sk_buff *skb, struct net_device *dev)
 	int len;
 	char *data, shortpkt[ETH_ZLEN];
 	struct snull_priv *priv = netdev_priv(dev);
-	
+
 	data = skb->data;
 	len = skb->len;
 	if (len < ETH_ZLEN) {
@@ -551,7 +557,7 @@ void snull_tx_timeout (struct net_device *dev)
 
 
 /*
- * Ioctl commands 
+ * Ioctl commands
  */
 int snull_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
@@ -576,7 +582,7 @@ int snull_rebuild_header(struct sk_buff *skb)
 {
 	struct ethhdr *eth = (struct ethhdr *) skb->data;
 	struct net_device *dev = skb->dev;
-    
+
 	memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
 	memcpy(eth->h_dest, dev->dev_addr, dev->addr_len);
 	eth->h_dest[ETH_ALEN-1]   ^= 0x01;   /* dest is us xor 1 */
@@ -610,7 +616,7 @@ int snull_change_mtu(struct net_device *dev, int new_mtu)
 	unsigned long flags;
 	struct snull_priv *priv = netdev_priv(dev);
 	spinlock_t *lock = &priv->lock;
-    
+
 	/* check ranges */
 	if ((new_mtu < 68) || (new_mtu > 1500))
 		return -EINVAL;
@@ -623,6 +629,22 @@ int snull_change_mtu(struct net_device *dev, int new_mtu)
 	return 0; /* success */
 }
 
+static const struct net_device_ops snull_netdev_ops = {
+	.ndo_open            = snull_open,
+	.ndo_stop            = snull_release,
+	.ndo_set_config      = snull_config,
+	.ndo_start_xmit      = snull_tx,
+	.ndo_do_ioctl        = snull_ioctl,
+	.ndo_get_stats       = snull_stats,
+	.ndo_change_mtu      = snull_change_mtu,
+	.ndo_tx_timeout      = snull_tx_timeout,
+};
+
+static const struct header_ops snull_header_ops = {
+    .rebuild             = snull_rebuild_header,
+    .create              = snull_header,
+};
+
 /*
  * The init function (sometimes called probe).
  * It is invoked by register_netdev()
@@ -631,38 +653,35 @@ void snull_init(struct net_device *dev)
 {
 	struct snull_priv *priv;
 #if 0
-    	/*
+	/*
 	 * Make the usual checks: check_region(), probe irq, ...  -ENODEV
 	 * should be returned if no device found.  No resource should be
-	 * grabbed: this is done on open(). 
+	 * grabbed: this is done on open().
 	 */
 #endif
 
-    	/* 
+	/*
 	 * Then, assign other fields in dev, using ether_setup() and some
 	 * hand assignments
 	 */
 	ether_setup(dev); /* assign some of the fields */
 
-	dev->open            = snull_open;
-	dev->stop            = snull_release;
-	dev->set_config      = snull_config;
-	dev->hard_start_xmit = snull_tx;
-	dev->do_ioctl        = snull_ioctl;
-	dev->get_stats       = snull_stats;
-	dev->change_mtu      = snull_change_mtu;  
-	dev->rebuild_header  = snull_rebuild_header;
-	dev->hard_header     = snull_header;
-	dev->tx_timeout      = snull_tx_timeout;
+    dev->netdev_ops = &snull_netdev_ops;
+    dev->header_ops = &snull_header_ops;
 	dev->watchdog_timeo = timeout;
+
 	if (use_napi) {
-		dev->poll        = snull_poll;
-		dev->weight      = 2;
+        //FIXME: 3.6.10 kernel use napi_struct to host
+        // poll and weight, comment out until later
+		//napi_struct->poll        = snull_poll;
+		//napi_struct->weight      = 2;
 	}
 	/* keep the default flags, just add NOARP */
 	dev->flags           |= IFF_NOARP;
-	dev->features        |= NETIF_F_NO_CSUM;
-	dev->hard_header_cache = NULL;      /* Disable caching */
+    //FIXME: the feature field has been removed
+	//dev->features        |= NETIF_F_NO_CSUM;
+    //FIXME: the hard_header_cache field has been removed
+	//dev->hard_header_cache = NULL;      /* Disable caching */
 
 	/*
 	 * Then, initialize the priv field. This encloses the statistics
@@ -690,7 +709,7 @@ struct net_device *snull_devs[2];
 void snull_cleanup(void)
 {
 	int i;
-    
+
 	for (i = 0; i < 2;  i++) {
 		if (snull_devs[i]) {
 			unregister_netdev(snull_devs[i]);
@@ -726,7 +745,7 @@ int snull_init_module(void)
 		else
 			ret = 0;
    out:
-	if (ret) 
+	if (ret)
 		snull_cleanup();
 	return ret;
 }
