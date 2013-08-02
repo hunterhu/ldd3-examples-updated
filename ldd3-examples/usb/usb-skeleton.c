@@ -7,23 +7,25 @@
  *	modify it under the terms of the GNU General Public License as
  *	published by the Free Software Foundation, version 2.
  *
- * This driver is based on the 2.6.3 version of drivers/usb/usb-skeleton.c 
+ * This driver is based on the 2.6.3 version of drivers/usb/usb-skeleton.c
  * but has been rewritten to be easy to read and use, as no locks are now
  * needed anymore.
  *
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/kref.h>
-#include <linux/smp_lock.h>
 #include <linux/usb.h>
 #include <asm/uaccess.h>
 
+/* Kernel message defines */
+#define err(format, arg...) printk(KERN_ERR "%s: " format "\n" , __FILE__ , ## arg)
+#define info(format, arg...) printk(KERN_INFO "%s: " format "\n" , __FILE__ , ## arg)
+#define warn(format, arg...) printk(KERN_WARNING "%s: " format "\n" , __FILE__ , ## arg)
 
 /* Define these values to match your devices */
 #define USB_SKEL_VENDOR_ID	0xfff0
@@ -55,7 +57,7 @@ struct usb_skel {
 static struct usb_driver skel_driver;
 
 static void skel_delete(struct kref *kref)
-{	
+{
 	struct usb_skel *dev = to_skel_dev(kref);
 
 	usb_put_dev(dev->udev);
@@ -85,7 +87,7 @@ static int skel_open(struct inode *inode, struct file *file)
 		retval = -ENODEV;
 		goto exit;
 	}
-	
+
 	/* increment our usage count for the device */
 	kref_get(&dev->kref);
 
@@ -115,7 +117,7 @@ static ssize_t skel_read(struct file *file, char __user *buffer, size_t count, l
 	int retval = 0;
 
 	dev = (struct usb_skel *)file->private_data;
-	
+
 	/* do a blocking bulk read to get data from the device */
 	retval = usb_bulk_msg(dev->udev,
 			      usb_rcvbulkpipe(dev->udev, dev->bulk_in_endpointAddr),
@@ -137,8 +139,8 @@ static ssize_t skel_read(struct file *file, char __user *buffer, size_t count, l
 static void skel_write_bulk_callback(struct urb *urb, struct pt_regs *regs)
 {
 	/* sync/async unlink faults aren't errors */
-	if (urb->status && 
-	    !(urb->status == -ENOENT || 
+	if (urb->status &&
+	    !(urb->status == -ENOENT ||
 	      urb->status == -ECONNRESET ||
 	      urb->status == -ESHUTDOWN)) {
 		dbg("%s - nonzero write bulk status received: %d",
@@ -146,7 +148,7 @@ static void skel_write_bulk_callback(struct urb *urb, struct pt_regs *regs)
 	}
 
 	/* free up our allocated buffer */
-	usb_buffer_free(urb->dev, urb->transfer_buffer_length, 
+	usb_free_coherent(urb->dev, urb->transfer_buffer_length,
 			urb->transfer_buffer, urb->transfer_dma);
 }
 
@@ -170,7 +172,7 @@ static ssize_t skel_write(struct file *file, const char __user *user_buffer, siz
 		goto error;
 	}
 
-	buf = usb_buffer_alloc(dev->udev, count, GFP_KERNEL, &urb->transfer_dma);
+	buf = usb_alloc_coherent(dev->udev, count, GFP_KERNEL, &urb->transfer_dma);
 	if (!buf) {
 		retval = -ENOMEM;
 		goto error;
@@ -200,7 +202,7 @@ exit:
 	return count;
 
 error:
-	usb_buffer_free(dev->udev, count, buf, urb->transfer_dma);
+	usb_free_coherent(dev->udev, count, buf, urb->transfer_dma);
 	usb_free_urb(urb);
 	kfree(buf);
 	return retval;
@@ -214,14 +216,23 @@ static struct file_operations skel_fops = {
 	.release =	skel_release,
 };
 
-/* 
+static char *usb_skeleton_devnode(struct device *dev, umode_t *mode)
+{
+    struct usb_device *usb_dev;
+
+    usb_dev = to_usb_device(dev);
+    return kasprintf(GFP_KERNEL, "bus/usb/%03d/%03d",
+    usb_dev->bus->busnum, usb_dev->devnum);
+}
+
+/*
  * usb class driver info in order to get a minor number from the usb core,
  * and to have the device registered with devfs and the driver core
  */
 static struct usb_class_driver skel_class = {
 	.name = "usb/skel%d",
 	.fops = &skel_fops,
-	.mode = S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH,
+	.devnode = usb_skeleton_devnode ,
 	.minor_base = USB_SKEL_MINOR_BASE,
 };
 
@@ -307,8 +318,11 @@ static void skel_disconnect(struct usb_interface *interface)
 	struct usb_skel *dev;
 	int minor = interface->minor;
 
+    //FIXME: removed lock_kernel()/unlock_kernel()
+    //       but, I may need to replace it with
+    //       a pair of private locks
 	/* prevent skel_open() from racing skel_disconnect() */
-	lock_kernel();
+	//lock_kernel();
 
 	dev = usb_get_intfdata(interface);
 	usb_set_intfdata(interface, NULL);
@@ -316,7 +330,7 @@ static void skel_disconnect(struct usb_interface *interface)
 	/* give back our minor */
 	usb_deregister_dev(interface, &skel_class);
 
-	unlock_kernel();
+	//unlock_kernel();
 
 	/* decrement our usage count */
 	kref_put(&dev->kref, skel_delete);
@@ -325,7 +339,6 @@ static void skel_disconnect(struct usb_interface *interface)
 }
 
 static struct usb_driver skel_driver = {
-	.owner = THIS_MODULE,
 	.name = "skeleton",
 	.id_table = skel_table,
 	.probe = skel_probe,
