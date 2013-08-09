@@ -223,7 +223,7 @@ exit:
 
 #define RELEVANT_IFLAG(iflag) ((iflag) & (IGNBRK|BRKINT|IGNPAR|PARMRK|INPCK))
 
-static void tiny_set_termios(struct tty_struct *tty, struct termios *old_termios)
+static void tiny_set_termios(struct tty_struct *tty, struct ktermios *old_termios)
 {
 	unsigned int cflag;
 
@@ -312,7 +312,7 @@ static void tiny_set_termios(struct tty_struct *tty, struct termios *old_termios
 #define MSR_RI		0x20
 #define MSR_DSR		0x40
 
-static int tiny_tiocmget(struct tty_struct *tty, struct file *file)
+static int tiny_tiocmget(struct tty_struct *tty)
 {
 	struct tiny_serial *tiny = tty->driver_data;
 
@@ -331,7 +331,7 @@ static int tiny_tiocmget(struct tty_struct *tty, struct file *file)
 	return result;
 }
 
-static int tiny_tiocmset(struct tty_struct *tty, struct file *file,
+static int tiny_tiocmset(struct tty_struct *tty,
                          unsigned int set, unsigned int clear)
 {
 	struct tiny_serial *tiny = tty->driver_data;
@@ -352,6 +352,10 @@ static int tiny_tiocmset(struct tty_struct *tty, struct file *file,
 	return 0;
 }
 
+/* until this is needed, commented out to avoid
+ * compiler warnings
+ */
+#if 0
 static int tiny_read_proc(char *page, char **start, off_t off, int count,
                           int *eof, void *data)
 {
@@ -381,9 +385,10 @@ done:
 	*start = page + (off-begin);
 	return (count < begin+length-off) ? count : begin + length-off;
 }
+#endif
 
 #define tiny_ioctl tiny_ioctl_tiocgserial
-static int tiny_ioctl(struct tty_struct *tty, struct file *file,
+static int tiny_ioctl(struct tty_struct *tty,
                       unsigned int cmd, unsigned long arg)
 {
 	struct tiny_serial *tiny = tty->driver_data;
@@ -418,7 +423,7 @@ static int tiny_ioctl(struct tty_struct *tty, struct file *file,
 #undef tiny_ioctl
 
 #define tiny_ioctl tiny_ioctl_tiocmiwait
-static int tiny_ioctl(struct tty_struct *tty, struct file *file,
+static int tiny_ioctl(struct tty_struct *tty,
                       unsigned int cmd, unsigned long arg)
 {
 	struct tiny_serial *tiny = tty->driver_data;
@@ -458,7 +463,7 @@ static int tiny_ioctl(struct tty_struct *tty, struct file *file,
 #undef tiny_ioctl
 
 #define tiny_ioctl tiny_ioctl_tiocgicount
-static int tiny_ioctl(struct tty_struct *tty, struct file *file,
+static int tiny_ioctl(struct tty_struct *tty,
                       unsigned int cmd, unsigned long arg)
 {
 	struct tiny_serial *tiny = tty->driver_data;
@@ -488,16 +493,16 @@ static int tiny_ioctl(struct tty_struct *tty, struct file *file,
 #undef tiny_ioctl
 
 /* the real tiny_ioctl function.  The above is done to get the small functions in the book */
-static int tiny_ioctl(struct tty_struct *tty, struct file *file,
+static int tiny_ioctl(struct tty_struct *tty,
                       unsigned int cmd, unsigned long arg)
 {
 	switch (cmd) {
 	case TIOCGSERIAL:
-		return tiny_ioctl_tiocgserial(tty, file, cmd, arg);
+		return tiny_ioctl_tiocgserial(tty, cmd, arg);
 	case TIOCMIWAIT:
-		return tiny_ioctl_tiocmiwait(tty, file, cmd, arg);
+		return tiny_ioctl_tiocmiwait(tty, cmd, arg);
 	case TIOCGICOUNT:
-		return tiny_ioctl_tiocgicount(tty, file, cmd, arg);
+		return tiny_ioctl_tiocgicount(tty, cmd, arg);
 	}
 
 	return -ENOIOCTLCMD;
