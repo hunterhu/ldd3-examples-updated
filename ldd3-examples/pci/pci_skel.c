@@ -20,11 +20,16 @@ static unsigned char skel_get_revision(struct pci_dev *dev)
 
 static int probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
-	/* Do probing type stuff here.  
+    int rc;
+	/* Do probing type stuff here.
 	 * Like calling request_region();
 	 */
-	pci_enable_device(dev);
-	
+    rc = pci_enable_device(dev);
+    if ( rc ){
+        printk( KERN_ERR "pci_skel: pci enable failed (%i)\n", rc );
+        return rc;
+    }
+
 	if (skel_get_revision(dev) == 0x42)
 		return -ENODEV;
 
