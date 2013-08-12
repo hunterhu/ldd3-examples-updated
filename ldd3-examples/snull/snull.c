@@ -279,7 +279,8 @@ void snull_rx(struct net_device *dev, struct snull_packet *pkt)
 	return;
 }
 
-
+//Commented out until it is needed again
+#if 0
 /*
  * The poll implementation.
  */
@@ -330,6 +331,7 @@ static int snull_poll(struct net_device *dev, int *budget)
 	/* We couldn't process everything. */
 	return 1;
 }
+#endif
 
 
 /*
@@ -591,7 +593,7 @@ int snull_rebuild_header(struct sk_buff *skb)
 
 
 int snull_header(struct sk_buff *skb, struct net_device *dev,
-                unsigned short type, void *daddr, void *saddr,
+                unsigned short type, const void *daddr, const void *saddr,
                 unsigned int len)
 {
 	struct ethhdr *eth = (struct ethhdr *)skb_push(skb,ETH_HLEN);
