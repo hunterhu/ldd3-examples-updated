@@ -347,16 +347,16 @@ static int scullc_defer_op(int write, struct kiocb *iocb, char __user *buf,
 }
 
 
-static ssize_t scullc_aio_read(struct kiocb *iocb, char __user *buf, size_t count,
+static ssize_t scullc_aio_read(struct kiocb *iocb, const struct iovec *iov, unsigned long count,
 		loff_t pos)
 {
-	return scullc_defer_op(0, iocb, buf, count, pos);
+	return scullc_defer_op(0, iocb, iov->iov_base, count, pos);
 }
 
-static ssize_t scullc_aio_write(struct kiocb *iocb, const char __user *buf,
-		size_t count, loff_t pos)
+static ssize_t scullc_aio_write(struct kiocb *iocb, const struct iovec *iov,
+		unsigned long count, loff_t pos)
 {
-	return scullc_defer_op(1, iocb, (char __user *) buf, count, pos);
+	return scullc_defer_op(1, iocb, iov->iov_base, count, pos);
 }
 
 
